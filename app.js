@@ -765,7 +765,7 @@ function renderDashboard() {
     if (m.scoreA !== null && m.scoreB !== null) matchesPlayed++;
   });
 
-  const scores = calculateScores();
+  const scores = calculateScores("Dieciseisavos");
   const leaderName = scores.length > 0 ? scores[0].name : "Ninguno";
   const leaderPoints = scores.length > 0 ? scores[0].total : 0;
 
@@ -798,7 +798,7 @@ function renderDashboard() {
 
     <div class="dashboard-grid">
       <div class="panel-card">
-        <h3 class="panel-title">⭐ Tabla de Posiciones Rápida</h3>
+        <h3 class="panel-title">⭐ 16avos — Tabla de Posiciones</h3>
         <div class="table-responsive">
           <table class="custom-table">
             <thead>
@@ -826,9 +826,9 @@ function renderDashboard() {
             </tbody>
           </table>
         </div>
-        ${scores.length > 5 ? `<div style="text-align: right; margin-top: 1rem;">
-          <button class="btn btn-secondary btn-sm" onclick="switchTab('ranking')">Ver tabla completa →</button>
-        </div>` : ''}
+        <div style="text-align: right; margin-top: 1rem;">
+          <button class="btn btn-secondary btn-sm" onclick="setRankingPhase('Dieciseisavos'); switchTab('ranking')">Ver tabla completa →</button>
+        </div>
       </div>
 
       <div class="panel-card">
