@@ -1374,15 +1374,19 @@ function renderPredictions() {
               </div>
             </div>
 
-            ${isKnockout ? `
-              <div class="qualifier-select-container">
-                <span>Clasifica predicho:</span>
+            ${isKnockout ? (() => {
+              const isDraw = pred.scoreA !== null && pred.scoreB !== null && pred.scoreA === pred.scoreB;
+              const noWinner = !pred.winner;
+              const required = isDraw && noWinner && !locked;
+              return `
+              <div class="qualifier-select-container${required ? ' qualifier-required' : ''}">
+                <span class="qualifier-label">${required ? '⚠ Elige quien clasifica (penales):' : 'Clasifica:'}</span>
                 <button class="qualifier-btn ${pred.winner === m.teamA ? 'selected' : ''}"
                         ${locked ? 'disabled' : `onclick="setPredWinner(${m.id}, '${m.teamA}')"`} data-team="${m.teamA}">${m.teamA}</button>
                 <button class="qualifier-btn ${pred.winner === m.teamB ? 'selected' : ''}"
                         ${locked ? 'disabled' : `onclick="setPredWinner(${m.id}, '${m.teamB}')"`} data-team="${m.teamB}">${m.teamB}</button>
-              </div>
-            ` : ''}
+              </div>`;
+            })() : ''}
 
             <div class="match-footer">
               <span class="real-score-indicator">
@@ -1438,11 +1442,50 @@ window.updatePredScore = function(matchId, field, value) {
   if (!state.predictions[pId]) state.predictions[pId] = {};
   if (!state.predictions[pId][matchId]) state.predictions[pId][matchId] = { scoreA: null, scoreB: null, winner: "" };
   state.predictions[pId][matchId][field] = value === "" ? null : parseInt(value);
+
+  if (match && match.phase !== "Grupos") {
+    const pred = state.predictions[pId][matchId];
+    const a = pred.scoreA;
+    const b = pred.scoreB;
+    if (a !== null && b !== null) {
+      const autoWinner = a > b ? match.teamA : b > a ? match.teamB : "";
+      state.predictions[pId][matchId].winner = autoWinner;
+      // Update qualifier buttons in DOM without full re-render
+      const card = document.querySelector(`.match-card[data-match-id="${matchId}"]`);
+      if (card) {
+        card.querySelectorAll(".qualifier-btn").forEach(btn => {
+          btn.classList.toggle("selected", autoWinner !== "" && btn.getAttribute("data-team") === autoWinner);
+        });
+        const container = card.querySelector(".qualifier-select-container");
+        if (container) {
+          const isDraw = a === b;
+          container.classList.toggle("qualifier-required", isDraw);
+          const label = container.querySelector(".qualifier-label");
+          if (label) label.textContent = isDraw ? "⚠ Elige quien clasifica (penales):" : "Clasifica:";
+        }
+      }
+    }
+  }
 };
 
 async function savePredictions() {
   const pId = activePredictionParticipantId;
   if (!pId) return;
+
+  // Validate: knockout draw predictions must have a winner chosen
+  const missingWinner = state.matches.filter(m => {
+    if (m.phase === "Grupos" || isMatchLocked(m)) return false;
+    const pred = (state.predictions[pId] || {})[m.id];
+    return pred && pred.scoreA !== null && pred.scoreB !== null
+      && pred.scoreA === pred.scoreB && !pred.winner;
+  });
+  if (missingWinner.length > 0) {
+    const names = missingWinner.map(m => `${m.teamA} vs ${m.teamB}`).join(', ');
+    showToast(`Debes elegir quien clasifica en penales: ${names}`, "error");
+    const firstCard = document.querySelector(`.match-card[data-match-id="${missingWinner[0].id}"]`);
+    if (firstCard) firstCard.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
 
   const btn = document.getElementById("btn-save-predictions");
   const fab = document.getElementById("btn-save-predictions-fab");
