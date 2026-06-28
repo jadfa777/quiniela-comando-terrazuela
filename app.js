@@ -40,6 +40,7 @@ let currentUser = null; // { name, id }
 let currentActiveTab = "dashboard";
 let appInitialized = false;
 let officialMatches = [];
+let rankingPhaseFilter = null; // null = all phases; string = filter to one phase
 
 // Flag Emoji Mapper
 const COUNTRY_FLAGS = {
@@ -1469,7 +1470,7 @@ window.toggleOthersPreds = function(matchId, toggleEl) {
 };
 
 // --- Ranking / Tabla de Posiciones Module ---
-function calculateScores() {
+function calculateScores(phaseFilter) {
   const scores = [];
 
   state.participants.forEach(p => {
@@ -1487,6 +1488,7 @@ function calculateScores() {
 
     // 1. Matches scoring
     state.matches.forEach(m => {
+      if (phaseFilter && m.phase !== phaseFilter) return;
       const pred = pPreds[m.id];
       const hasOfficial = m.scoreA !== null && m.scoreB !== null;
       if (!pred || !hasOfficial || pred.scoreA === null || pred.scoreB === null) return;
@@ -1509,8 +1511,8 @@ function calculateScores() {
       }
     });
 
-    // 2. Bonus scoring
-    if (state.results) {
+    // 2. Bonus scoring (only in total view, not per-phase)
+    if (!phaseFilter && state.results) {
       // Champion
       if (state.results.champion && pBonus.champion === state.results.champion) {
         bonusPoints += state.config.champion;
@@ -1619,9 +1621,23 @@ window.closeHistoryModal = function() {
   document.getElementById('modal-history-overlay').classList.remove('active');
 };
 
+window.setRankingPhase = function(phase) {
+  rankingPhaseFilter = phase;
+  renderRanking();
+};
+
 function renderRanking() {
   const container = document.getElementById("sec-ranking");
-  const scores = calculateScores();
+  const scores = calculateScores(rankingPhaseFilter);
+
+  const phaseOrder = ["Grupos", "Dieciseisavos", "Octavos", "Cuartos", "Semifinales", "Tercer puesto", "Final"];
+  const availablePhases = phaseOrder.filter(ph => state.matches.some(m => m.phase === ph));
+  const phaseChips = [
+    `<button class="phase-chip ${!rankingPhaseFilter ? 'active' : ''}" onclick="setRankingPhase(null)">Total</button>`,
+    ...availablePhases.map(ph =>
+      `<button class="phase-chip ${rankingPhaseFilter === ph ? 'active' : ''}" onclick="setRankingPhase('${ph}')">${ph}</button>`
+    )
+  ].join('');
 
   // Create podium (top 3)
   const top1 = scores[0] || null;
@@ -1683,14 +1699,20 @@ function renderRanking() {
     </tr>
   `).join('');
 
+  const rankingTitle = rankingPhaseFilter ? `🏆 Clasificación — ${rankingPhaseFilter}` : '🏆 Clasificación General';
+  const rankingDesc = rankingPhaseFilter
+    ? `Puntos acumulados solo en la fase <strong>${rankingPhaseFilter}</strong>. La cuenta empieza desde cero en cada fase.`
+    : 'Tabla de puntuación acumulada en tiempo real de todas las fases.';
+
   container.innerHTML = `
     <div class="section-header">
       <div class="section-title">
-        <h2>🏆 Clasificación General</h2>
-        <p>Tabla de puntuación en tiempo real actualizada automáticamente.</p>
+        <h2>${rankingTitle}</h2>
+        <p>${rankingDesc}</p>
       </div>
       <button class="btn btn-secondary" onclick="renderRanking()">🔄 Recargar</button>
     </div>
+    <div class="ranking-phase-chips">${phaseChips}</div>
 
     ${podiumHtml}
 

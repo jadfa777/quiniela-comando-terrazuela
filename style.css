@@ -2018,6 +2018,36 @@ nav {
 .pts-pos  { background: rgba(16,185,129,0.15); color: var(--accent-emerald); }
 .pts-zero-b { background: rgba(255,255,255,0.06); color: var(--text-muted); }
 
+/* Ranking: selector de fase */
+.ranking-phase-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+.phase-chip {
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: rgba(255,255,255,0.05);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.phase-chip:hover {
+  border-color: var(--accent-emerald);
+  color: var(--text-primary);
+  background: rgba(16,185,129,0.08);
+}
+.phase-chip.active {
+  background: var(--accent-emerald);
+  border-color: var(--accent-emerald);
+  color: #000;
+}
+
 /* Ranking: últimos 5 pronósticos */
 .form-badges { display: flex; gap: 3px; justify-content: center; align-items: center; }
 .form-empty  { color: var(--text-muted); font-size: 0.75rem; }
