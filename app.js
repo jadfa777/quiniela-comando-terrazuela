@@ -1335,7 +1335,7 @@ function renderPredictions() {
           }
 
           if (isKnockout && pred.winner && pred.winner === m.winner) {
-            points += state.config.qualifier;
+            points += predSign === "X" ? 1 : state.config.qualifier;
             if (pointsClass === "points-zero") pointsClass = "points-outcome";
             pointsText = `+${points} pts (Clasifica)`;
           }
@@ -1549,7 +1549,7 @@ function calculateScores(phaseFilter) {
       }
 
       if (m.phase !== "Grupos" && pred.winner && pred.winner === m.winner) {
-        matchPoints += state.config.qualifier;
+        matchPoints += predSign === "X" ? 1 : state.config.qualifier;
         qualifiers++;
       }
     });
@@ -1995,7 +1995,10 @@ function calcPredPoints(pred, m) {
   let pts = 0;
   if (isExact) pts += state.config.exactScore;
   else if (predSign === m.sign) pts += state.config.outcome;
-  if (m.phase !== "Grupos" && pred.winner && pred.winner === m.winner) pts += state.config.qualifier;
+  if (m.phase !== "Grupos" && pred.winner && pred.winner === m.winner) {
+    // Draw prediction: +1 pt extra for guessing who advances on penalties
+    pts += predSign === "X" ? 1 : state.config.qualifier;
+  }
   return pts;
 }
 
