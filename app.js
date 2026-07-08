@@ -813,7 +813,7 @@ function renderDashboard() {
               </tr>
             </thead>
             <tbody>
-              ${scores.slice(0, 5).map((p, idx) => `
+              ${scores.map((p, idx) => `
                 <tr class="${idx === 0 ? 'participant-row-active' : ''}">
                   <td class="rank-pos ${idx === 0 ? 'rank-first' : idx === 1 ? 'rank-second' : idx === 2 ? 'rank-third' : ''}">
                     ${idx + 1}
