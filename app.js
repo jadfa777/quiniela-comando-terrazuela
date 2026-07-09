@@ -1827,7 +1827,7 @@ function renderBonus() {
 
   const p = state.participants.find(item => item.id === activeBonusParticipantId);
   const pBonus = state.bonus[p.id] || { champion: "", runnerUp: "", semis: ["", "", "", ""] };
-
+  const bonusLocked = isBonusLocked();
 
   // Only show teams still alive: those appearing in unplayed knockout matches with real names
   const isPlaceholder = t => !t || /^(Ganador|Perdedor|\dº Grupo)/.test(t);
@@ -1857,19 +1857,21 @@ function renderBonus() {
       <div class="panel-card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:0.5rem;">
           <h3 style="font-size:1.1rem; font-weight:600;">Predicciones de: <span style="color:var(--accent-cyan)">${escapeHtml(p.name)}</span></h3>
+          ${bonusLocked ? `<span style="font-size:0.75rem; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.3); border-radius:20px; padding:0.25rem 0.75rem;">🔒 Cerrado</span>` : ''}
         </div>
+        ${bonusLocked ? `<div style="padding:0.75rem 1rem; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px; color:var(--text-secondary); font-size:0.82rem; margin-bottom:1.25rem;">🔒 Los Cuartos de Final han comenzado. Las predicciones del podio están cerradas.</div>` : ''}
 
         <form id="bonus-prediction-form">
           <div class="form-group">
             <label class="form-label">🏆 Campeón Predicho</label>
-            <select class="form-control" id="pred-champ">
+            <select class="form-control" id="pred-champ" ${bonusLocked ? 'disabled' : ''}>
               ${getTeamOptions(pBonus.champion)}
             </select>
           </div>
-          
+
           <div class="form-group">
             <label class="form-label">🥈 Subcampeón Predicho</label>
-            <select class="form-control" id="pred-runner">
+            <select class="form-control" id="pred-runner" ${bonusLocked ? 'disabled' : ''}>
               ${getTeamOptions(pBonus.runnerUp)}
             </select>
           </div>
@@ -1877,22 +1879,25 @@ function renderBonus() {
           <div class="form-group">
             <label class="form-label">🥉 Semifinalistas Predichos (4 equipos)</label>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem;">
-              <select class="form-control pred-semi" data-index="0">
+              <select class="form-control pred-semi" data-index="0" ${bonusLocked ? 'disabled' : ''}>
                 ${getTeamOptions(pBonus.semis ? pBonus.semis[0] : "")}
               </select>
-              <select class="form-control pred-semi" data-index="1">
+              <select class="form-control pred-semi" data-index="1" ${bonusLocked ? 'disabled' : ''}>
                 ${getTeamOptions(pBonus.semis ? pBonus.semis[1] : "")}
               </select>
-              <select class="form-control pred-semi" data-index="2">
+              <select class="form-control pred-semi" data-index="2" ${bonusLocked ? 'disabled' : ''}>
                 ${getTeamOptions(pBonus.semis ? pBonus.semis[2] : "")}
               </select>
-              <select class="form-control pred-semi" data-index="3">
+              <select class="form-control pred-semi" data-index="3" ${bonusLocked ? 'disabled' : ''}>
                 ${getTeamOptions(pBonus.semis ? pBonus.semis[3] : "")}
               </select>
             </div>
           </div>
 
-          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">💾 Guardar Podio Predicho</button>
+          ${bonusLocked
+            ? `<div style="margin-top:1rem; padding:0.6rem 1rem; background:rgba(107,114,128,0.1); border:1px solid rgba(107,114,128,0.2); border-radius:8px; color:var(--text-muted); font-size:0.82rem; text-align:center;">🔒 No se pueden modificar las predicciones</div>`
+            : `<button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">💾 Guardar Podio Predicho</button>`
+          }
         </form>
       </div>
 
@@ -1954,6 +1959,7 @@ function renderBonus() {
   // Submit Predictions Form
   document.getElementById("bonus-prediction-form").addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (isBonusLocked()) { showToast("Las predicciones del podio están cerradas.", "error"); return; }
     const pId = activeBonusParticipantId;
     const submitBtn = e.target.querySelector("button[type=submit]");
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "⏳ Guardando..."; }
@@ -2007,6 +2013,11 @@ function formatMatchSchedule(m) {
 function isMatchLocked(m) {
   if (!m.kickoff && (!m.date || !m.time)) return false;
   return Date.now() >= new Date(m.kickoff || `${m.date}T${m.time}:00${m.utcOffset || ""}`).getTime();
+}
+
+function isBonusLocked() {
+  const firstQF = state.matches.find(m => m.phase === "Cuartos");
+  return firstQF ? isMatchLocked(firstQF) : false;
 }
 
 function calcPredPoints(pred, m) {
