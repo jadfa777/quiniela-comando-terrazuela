@@ -1853,9 +1853,14 @@ function renderBonus() {
   const teamOpts = (sel) => `<option value="">-- Selecciona --</option>` +
     adminTeams.map(t => `<option value="${t}" ${sel === t ? 'selected' : ''}>${getFlag(t)} ${t}</option>`).join('');
 
-  // Build comparison rows
+  // Build comparison rows — before lock only show the current user's own row
+  const locked = isBonusLocked();
   const activeParts = state.participants.filter(p => p.active !== false);
-  const rows = activeParts.map(p => {
+  const visibleParts = (locked || isAdmin())
+    ? activeParts
+    : activeParts.filter(p => currentUser && p.id === currentUser.id);
+
+  const buildRow = (p) => {
     const pod = getBracketPodium(p.id);
     const isMe = currentUser && currentUser.id === p.id;
     const champOk = hasResults && res.champion && pod.champion === res.champion;
@@ -1881,7 +1886,9 @@ function renderBonus() {
         <td>${semisCell}</td>
         ${hasResults ? `<td style="text-align:center; font-weight:600; color:${(champOk ? state.config.champion : 0) + (runnerOk ? state.config.runnerUp : 0) + semiMatches * state.config.semis > 0 ? 'var(--accent-green)' : 'var(--text-muted)'}">+${(champOk ? state.config.champion : 0) + (runnerOk ? state.config.runnerUp : 0) + semiMatches * state.config.semis}</td>` : ''}
       </tr>`;
-  }).join('');
+  };
+
+  const rows = visibleParts.map(buildRow).join('');
 
   container.innerHTML = `
     <div class="section-header">
@@ -1938,7 +1945,8 @@ function renderBonus() {
     ` : ''}
 
     <div class="panel-card">
-      <h3 class="panel-title" style="margin-bottom:1.25rem;">Predicciones de cada participante</h3>
+      <h3 class="panel-title" style="margin-bottom:${locked ? '1.25rem' : '0.5rem'};">${locked ? 'Predicciones de cada participante' : 'Tu predicción de podio'}</h3>
+      ${!locked && !isAdmin() ? `<p style="margin:0 0 1.25rem; font-size:0.85rem; color:var(--text-muted);">Las predicciones del resto se revelarán cuando comiencen los Cuartos de Final. 🔒</p>` : ''}
       <div style="overflow-x:auto;">
         <table class="ranking-table" style="min-width:500px;">
           <thead>
