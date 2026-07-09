@@ -1829,23 +1829,14 @@ function renderBonus() {
   const pBonus = state.bonus[p.id] || { champion: "", runnerUp: "", semis: ["", "", "", ""] };
 
 
-  // Extract all teams list dynamically from matches, excluding eliminated teams
+  // Only show teams still alive: those appearing in unplayed knockout matches with real names
   const isPlaceholder = t => !t || /^(Ganador|Perdedor|\dº Grupo)/.test(t);
-  const eliminatedTeams = new Set(
+  const allTeams = [...new Set(
     state.matches
-      .filter(m => m.phase !== "Grupos" && m.scoreA !== null && m.scoreB !== null)
-      .flatMap(m => {
-        const loser = m.winner
-          ? [m.teamA, m.teamB].find(t => t !== m.winner)
-          : m.scoreA > m.scoreB ? m.teamB
-          : m.scoreB > m.scoreA ? m.teamA
-          : null;
-        return loser && !isPlaceholder(loser) ? [loser] : [];
-      })
-  );
-  const allTeams = [...new Set(state.matches.map(m => m.teamA).concat(state.matches.map(m => m.teamB)))]
-    .filter(t => t && !t.includes("Grupo") && !t.includes("Ganador") && !t.includes("Perdedor") && !eliminatedTeams.has(t))
-    .sort();
+      .filter(m => m.phase !== "Grupos" && m.scoreA === null)
+      .flatMap(m => [m.teamA, m.teamB])
+      .filter(t => !isPlaceholder(t))
+  )].sort();
 
   const getTeamOptions = (selectedVal) => {
     return `<option value="">-- Selecciona equipo --</option>` + allTeams.map(t => `
