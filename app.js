@@ -1330,6 +1330,12 @@ function renderPredictions() {
         const hasOfficial = m.scoreA !== null && m.scoreB !== null;
         const locked = isMatchLocked(m);
 
+        // Bracket cascade: resolve placeholder names from participant's predictions (Cuartos onwards)
+        const BRACKET_PHASES = ["Cuartos", "Semifinales", "Tercer puesto", "Final"];
+        const isBracket = BRACKET_PHASES.includes(m.phase);
+        const displayTeamA = isBracket ? resolveTeamForParticipant(m.teamA, activePredictionParticipantId) : m.teamA;
+        const displayTeamB = isBracket ? resolveTeamForParticipant(m.teamB, activePredictionParticipantId) : m.teamB;
+
         // Calculate points preview for this match
         let points = 0;
         let pointsClass = "points-zero";
@@ -1372,8 +1378,8 @@ function renderPredictions() {
               <!-- Team A -->
               <div class="team-row">
                 <div class="team-info">
-                  <span class="team-flag">${getFlag(m.teamA)}</span>
-                  <span>${m.teamA}</span>
+                  <span class="team-flag">${getFlag(displayTeamA)}</span>
+                  <span>${displayTeamA}</span>
                 </div>
                 <input type="number" min="0" class="score-input pred-score-a"
                        value="${pred.scoreA !== null ? pred.scoreA : ''}" placeholder="-" ${locked ? 'disabled' : `oninput="updatePredScore(${m.id},'scoreA',this.value)"`}>
@@ -1382,8 +1388,8 @@ function renderPredictions() {
               <!-- Team B -->
               <div class="team-row">
                 <div class="team-info">
-                  <span class="team-flag">${getFlag(m.teamB)}</span>
-                  <span>${m.teamB}</span>
+                  <span class="team-flag">${getFlag(displayTeamB)}</span>
+                  <span>${displayTeamB}</span>
                 </div>
                 <input type="number" min="0" class="score-input pred-score-b"
                        value="${pred.scoreB !== null ? pred.scoreB : ''}" placeholder="-" ${locked ? 'disabled' : `oninput="updatePredScore(${m.id},'scoreB',this.value)"`}>
@@ -1397,10 +1403,10 @@ function renderPredictions() {
               return `
               <div class="qualifier-select-container${required ? ' qualifier-required' : ''}">
                 <span class="qualifier-label">${required ? '⚠ Elige quien clasifica (penales):' : 'Clasifica:'}</span>
-                <button class="qualifier-btn ${pred.winner === m.teamA ? 'selected' : ''}"
-                        ${locked ? 'disabled' : `onclick="setPredWinner(${m.id}, '${m.teamA}')"`} data-team="${m.teamA}">${m.teamA}</button>
-                <button class="qualifier-btn ${pred.winner === m.teamB ? 'selected' : ''}"
-                        ${locked ? 'disabled' : `onclick="setPredWinner(${m.id}, '${m.teamB}')"`} data-team="${m.teamB}">${m.teamB}</button>
+                <button class="qualifier-btn ${pred.winner === displayTeamA ? 'selected' : ''}"
+                        ${locked ? 'disabled' : `onclick="setPredWinner(${m.id}, '${displayTeamA}')"`} data-team="${displayTeamA}">${displayTeamA}</button>
+                <button class="qualifier-btn ${pred.winner === displayTeamB ? 'selected' : ''}"
+                        ${locked ? 'disabled' : `onclick="setPredWinner(${m.id}, '${displayTeamB}')"`} data-team="${displayTeamB}">${displayTeamB}</button>
               </div>`;
             })() : ''}
 
@@ -1442,6 +1448,13 @@ window.setPredWinner = function(matchId, teamName) {
   if (!state.predictions[pId][matchId]) state.predictions[pId][matchId] = { scoreA: null, scoreB: null, winner: "" };
   state.predictions[pId][matchId].winner = teamName;
 
+  // Re-render to cascade the winner into downstream bracket match cards
+  const match = state.matches.find(m => m.id === matchId);
+  if (match && ["Cuartos", "Semifinales", "Tercer puesto", "Final"].includes(match.phase)) {
+    renderPredictions();
+    return;
+  }
+
   const card = document.querySelector(`.match-card[data-match-id="${matchId}"]`);
   if (card) {
     card.querySelectorAll(".qualifier-btn").forEach(btn => {
@@ -1464,9 +1477,20 @@ window.updatePredScore = function(matchId, field, value) {
     const a = pred.scoreA;
     const b = pred.scoreB;
     if (a !== null && b !== null) {
-      const autoWinner = a > b ? match.teamA : b > a ? match.teamB : "";
+      // Use resolved names for bracket phases so stored winner is the real team name
+      const isBracket = ["Cuartos", "Semifinales", "Tercer puesto", "Final"].includes(match.phase);
+      const resolvedA = isBracket ? resolveTeamForParticipant(match.teamA, pId) : match.teamA;
+      const resolvedB = isBracket ? resolveTeamForParticipant(match.teamB, pId) : match.teamB;
+      const autoWinner = a > b ? resolvedA : b > a ? resolvedB : "";
       state.predictions[pId][matchId].winner = autoWinner;
-      // Update qualifier buttons in DOM without full re-render
+
+      // Bracket: re-render after a short delay (keeps focus for current input, then cascades)
+      if (isBracket && autoWinner !== "") {
+        setTimeout(() => renderPredictions(), 0);
+        return;
+      }
+
+      // Non-bracket or draw: update qualifier buttons in DOM without full re-render
       const card = document.querySelector(`.match-card[data-match-id="${matchId}"]`);
       if (card) {
         card.querySelectorAll(".qualifier-btn").forEach(btn => {
@@ -2018,6 +2042,44 @@ function isMatchLocked(m) {
 function isBonusLocked() {
   const firstQF = state.matches.find(m => m.phase === "Cuartos");
   return firstQF ? isMatchLocked(firstQF) : false;
+}
+
+// Resolves a placeholder team name ("Ganador 97", "Perdedor 101") to the real team
+// based on the participant's own predictions. Used for bracket cascade display.
+function resolveTeamForParticipant(teamName, participantId, _depth) {
+  if (!teamName || (_depth || 0) > 8) return teamName;
+  const d = (_depth || 0) + 1;
+
+  const ganador = /^Ganador (\d+)$/.exec(teamName);
+  if (ganador) {
+    const srcId = parseInt(ganador[1]);
+    const src = state.matches.find(m => m.id === srcId);
+    if (!src) return teamName;
+    const pred = ((state.predictions[participantId] || {})[srcId]) || {};
+    if (pred.winner) return pred.winner;
+    if (pred.scoreA !== null && pred.scoreB !== null && pred.scoreA !== pred.scoreB) {
+      return pred.scoreA > pred.scoreB
+        ? resolveTeamForParticipant(src.teamA, participantId, d)
+        : resolveTeamForParticipant(src.teamB, participantId, d);
+    }
+    return teamName;
+  }
+
+  const perdedor = /^Perdedor (\d+)$/.exec(teamName);
+  if (perdedor) {
+    const srcId = parseInt(perdedor[1]);
+    const src = state.matches.find(m => m.id === srcId);
+    if (!src) return teamName;
+    const pred = ((state.predictions[participantId] || {})[srcId]) || {};
+    if (pred.winner) {
+      const rA = resolveTeamForParticipant(src.teamA, participantId, d);
+      const rB = resolveTeamForParticipant(src.teamB, participantId, d);
+      return pred.winner === rA ? rB : rA;
+    }
+    return teamName;
+  }
+
+  return teamName;
 }
 
 function calcPredPoints(pred, m) {
