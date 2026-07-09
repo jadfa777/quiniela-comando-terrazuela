@@ -1856,7 +1856,7 @@ function renderBonus() {
   // Build comparison rows — before lock only show the current user's own row
   const locked = isBonusLocked();
   const activeParts = state.participants.filter(p => p.active !== false);
-  const visibleParts = (locked || isAdmin())
+  const visibleParts = locked
     ? activeParts
     : activeParts.filter(p => currentUser && p.id === currentUser.id);
 
@@ -1946,7 +1946,7 @@ function renderBonus() {
 
     <div class="panel-card">
       <h3 class="panel-title" style="margin-bottom:${locked ? '1.25rem' : '0.5rem'};">${locked ? 'Predicciones de cada participante' : 'Tu predicción de podio'}</h3>
-      ${!locked && !isAdmin() ? `<p style="margin:0 0 1.25rem; font-size:0.85rem; color:var(--text-muted);">Las predicciones del resto se revelarán cuando comiencen los Cuartos de Final. 🔒</p>` : ''}
+      ${!locked ? `<p style="margin:0 0 1.25rem; font-size:0.85rem; color:var(--text-muted);">Las predicciones del resto se revelarán cuando comiencen los Cuartos de Final. 🔒</p>` : ''}
       <div style="overflow-x:auto;">
         <table class="ranking-table" style="min-width:500px;">
           <thead>
