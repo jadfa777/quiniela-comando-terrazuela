@@ -2050,15 +2050,31 @@ function resolveTeamForParticipant(teamName, participantId, _depth) {
   if (!teamName || (_depth || 0) > 8) return teamName;
   const d = (_depth || 0) + 1;
 
+  // Helper: look up prediction by match id (robust against type mismatches)
+  function getPred(srcId) {
+    const preds = state.predictions[participantId]
+      || state.predictions[String(participantId)]
+      || {};
+    return preds[srcId] || preds[String(srcId)] || {};
+  }
+
+  // Helper: find match by id (robust against number/string mismatch)
+  function getSrc(srcId) {
+    return state.matches.find(m => m.id === srcId || String(m.id) === String(srcId));
+  }
+
   const ganador = /^Ganador (\d+)$/.exec(teamName);
   if (ganador) {
     const srcId = parseInt(ganador[1]);
-    const src = state.matches.find(m => m.id === srcId);
+    const src = getSrc(srcId);
     if (!src) return teamName;
-    const pred = ((state.predictions[participantId] || {})[srcId]) || {};
-    if (pred.winner) return pred.winner;
-    if (pred.scoreA !== null && pred.scoreB !== null && pred.scoreA !== pred.scoreB) {
-      return pred.scoreA > pred.scoreB
+    const pred = getPred(srcId);
+    // Use stored winner only if it's a real team name (not itself a placeholder)
+    if (pred.winner && !isPlaceholderTeam(pred.winner)) return pred.winner;
+    const a = pred.scoreA != null ? Number(pred.scoreA) : null;
+    const b = pred.scoreB != null ? Number(pred.scoreB) : null;
+    if (a !== null && b !== null && a !== b) {
+      return a > b
         ? resolveTeamForParticipant(src.teamA, participantId, d)
         : resolveTeamForParticipant(src.teamB, participantId, d);
     }
@@ -2068,10 +2084,10 @@ function resolveTeamForParticipant(teamName, participantId, _depth) {
   const perdedor = /^Perdedor (\d+)$/.exec(teamName);
   if (perdedor) {
     const srcId = parseInt(perdedor[1]);
-    const src = state.matches.find(m => m.id === srcId);
+    const src = getSrc(srcId);
     if (!src) return teamName;
-    const pred = ((state.predictions[participantId] || {})[srcId]) || {};
-    if (pred.winner) {
+    const pred = getPred(srcId);
+    if (pred.winner && !isPlaceholderTeam(pred.winner)) {
       const rA = resolveTeamForParticipant(src.teamA, participantId, d);
       const rB = resolveTeamForParticipant(src.teamB, participantId, d);
       return pred.winner === rA ? rB : rA;
