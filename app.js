@@ -1594,19 +1594,17 @@ function calculateScores(phaseFilter) {
       }
     });
 
-    // 2. Bonus scoring (only in total view, not per-phase)
+    // 2. Bonus scoring derived from bracket predictions (only in total view)
     if (!phaseFilter && state.results) {
-      // Champion
-      if (state.results.champion && pBonus.champion === state.results.champion) {
+      const pPodium = getBracketPodium(p.id);
+      if (state.results.champion && pPodium.champion === state.results.champion) {
         bonusPoints += state.config.champion;
       }
-      // Runner up
-      if (state.results.runnerUp && pBonus.runnerUp === state.results.runnerUp) {
+      if (state.results.runnerUp && pPodium.runnerUp === state.results.runnerUp) {
         bonusPoints += state.config.runnerUp;
       }
-      // Semis
-      if (state.results.semis && Array.isArray(pBonus.semis)) {
-        pBonus.semis.forEach(semiTeam => {
+      if (state.results.semis) {
+        pPodium.semis.forEach(semiTeam => {
           if (semiTeam && state.results.semis.includes(semiTeam)) {
             bonusPoints += state.config.semis;
           }
@@ -1829,195 +1827,155 @@ let activeBonusParticipantId = null;
 
 function renderBonus() {
   const container = document.getElementById("sec-bonus");
-  
+
   if (state.participants.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">🏆</div>
         <h3 class="empty-title">Sin Participantes</h3>
-        <p class="empty-description">Para rellenar las predicciones del podio final, primero añade participantes.</p>
+        <p class="empty-description">Añade participantes para ver el resumen del podio predicho.</p>
         <button class="btn btn-primary" onclick="switchTab('participants')">Añadir Participante</button>
       </div>
     `;
     return;
   }
 
-  // Lock bonus to current user
-  if (currentUser && state.participants.some(p => p.id === currentUser.id)) {
-    activeBonusParticipantId = currentUser.id;
-  } else if (activeBonusParticipantId === null || !state.participants.some(p => p.id === activeBonusParticipantId)) {
-    activeBonusParticipantId = state.participants[0].id;
-  }
+  const BRACKET_PHASES = ["Cuartos", "Semifinales", "Tercer puesto", "Final"];
+  const res = state.results || {};
+  const hasResults = res.champion || res.runnerUp || (res.semis && res.semis.some(Boolean));
 
-  const p = state.participants.find(item => item.id === activeBonusParticipantId);
-  const pBonus = state.bonus[p.id] || { champion: "", runnerUp: "", semis: ["", "", "", ""] };
-  const bonusLocked = isBonusLocked();
+  // Build team list for admin dropdowns: unplayed bracket teams + winners of completed bracket matches
+  const adminTeams = [...new Set([
+    ...state.matches.filter(m => BRACKET_PHASES.includes(m.phase) && m.scoreA === null).flatMap(m => [m.teamA, m.teamB]),
+    ...state.matches.filter(m => BRACKET_PHASES.includes(m.phase) && m.scoreA !== null && m.winner).map(m => m.winner),
+  ].filter(t => !isPlaceholderTeam(t)))].sort();
 
-  // Only show teams still alive: those appearing in unplayed knockout matches with real names
-  const isPlaceholder = t => !t || /^(Ganador|Perdedor|\dº Grupo)/.test(t);
-  const allTeams = [...new Set(
-    state.matches
-      .filter(m => m.phase !== "Grupos" && m.scoreA === null)
-      .flatMap(m => [m.teamA, m.teamB])
-      .filter(t => !isPlaceholder(t))
-  )].sort();
+  const teamOpts = (sel) => `<option value="">-- Selecciona --</option>` +
+    adminTeams.map(t => `<option value="${t}" ${sel === t ? 'selected' : ''}>${getFlag(t)} ${t}</option>`).join('');
 
-  const getTeamOptions = (selectedVal) => {
-    return `<option value="">-- Selecciona equipo --</option>` + allTeams.map(t => `
-      <option value="${t}" ${selectedVal === t ? 'selected' : ''}>${getFlag(t)} ${t}</option>
-    `).join('');
-  };
+  // Build comparison rows
+  const activeParts = state.participants.filter(p => p.active !== false);
+  const rows = activeParts.map(p => {
+    const pod = getBracketPodium(p.id);
+    const isMe = currentUser && currentUser.id === p.id;
+    const champOk = hasResults && res.champion && pod.champion === res.champion;
+    const runnerOk = hasResults && res.runnerUp && pod.runnerUp === res.runnerUp;
+    const semiMatches = hasResults && res.semis ? pod.semis.filter(t => res.semis.includes(t)).length : 0;
+
+    const teamCell = (t, ok) => t
+      ? `<span style="white-space:nowrap; ${ok ? 'color:var(--accent-green); font-weight:600;' : ''}">${getFlag(t)} ${t}${ok ? ' ✓' : ''}</span>`
+      : `<span style="color:var(--text-muted)">—</span>`;
+
+    const semisCell = pod.semis.length
+      ? pod.semis.map(t => {
+          const ok = hasResults && res.semis && res.semis.includes(t);
+          return `<span style="display:inline-block; margin:0.15rem 0.4rem 0.15rem 0; white-space:nowrap; ${ok ? 'color:var(--accent-green); font-weight:600;' : ''}">${getFlag(t)} ${t}${ok ? ' ✓' : ''}</span>`;
+        }).join('')
+      : `<span style="color:var(--text-muted)">—</span>`;
+
+    return `
+      <tr style="${isMe ? 'background:rgba(99,102,241,0.08);' : ''}">
+        <td style="font-weight:${isMe ? '700' : '500'}; white-space:nowrap;">${escapeHtml(p.name)}${isMe ? ' ★' : ''}</td>
+        <td>${teamCell(pod.champion, champOk)}</td>
+        <td>${teamCell(pod.runnerUp, runnerOk)}</td>
+        <td>${semisCell}</td>
+        ${hasResults ? `<td style="text-align:center; font-weight:600; color:${(champOk ? state.config.champion : 0) + (runnerOk ? state.config.runnerUp : 0) + semiMatches * state.config.semis > 0 ? 'var(--accent-green)' : 'var(--text-muted)'}">+${(champOk ? state.config.champion : 0) + (runnerOk ? state.config.runnerUp : 0) + semiMatches * state.config.semis}</td>` : ''}
+      </tr>`;
+  }).join('');
 
   container.innerHTML = `
     <div class="section-header">
       <div class="section-title">
-        <h2>⭐ Predicciones de Podio (Bonus)</h2>
-        <p>Define quién será el campeón, subcampeón y semifinalistas para obtener puntos extra.</p>
+        <h2>⭐ Podio Predicho</h2>
+        <p>Derivado automáticamente de los pronósticos del bracket de cada participante.</p>
       </div>
     </div>
 
-    <div class="grid-two-cols">
-      <!-- Section 1: User Prediction -->
-      <div class="panel-card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:0.5rem;">
-          <h3 style="font-size:1.1rem; font-weight:600;">Predicciones de: <span style="color:var(--accent-cyan)">${escapeHtml(p.name)}</span></h3>
-          ${bonusLocked ? `<span style="font-size:0.75rem; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.3); border-radius:20px; padding:0.25rem 0.75rem;">🔒 Cerrado</span>` : ''}
-        </div>
-        ${bonusLocked ? `<div style="padding:0.75rem 1rem; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px; color:var(--text-secondary); font-size:0.82rem; margin-bottom:1.25rem;">🔒 Los Cuartos de Final han comenzado. Las predicciones del podio están cerradas.</div>` : ''}
-
-        <form id="bonus-prediction-form">
-          <div class="form-group">
-            <label class="form-label">🏆 Campeón Predicho</label>
-            <select class="form-control" id="pred-champ" ${bonusLocked ? 'disabled' : ''}>
-              ${getTeamOptions(pBonus.champion)}
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">🥈 Subcampeón Predicho</label>
-            <select class="form-control" id="pred-runner" ${bonusLocked ? 'disabled' : ''}>
-              ${getTeamOptions(pBonus.runnerUp)}
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">🥉 Semifinalistas Predichos (4 equipos)</label>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem;">
-              <select class="form-control pred-semi" data-index="0" ${bonusLocked ? 'disabled' : ''}>
-                ${getTeamOptions(pBonus.semis ? pBonus.semis[0] : "")}
-              </select>
-              <select class="form-control pred-semi" data-index="1" ${bonusLocked ? 'disabled' : ''}>
-                ${getTeamOptions(pBonus.semis ? pBonus.semis[1] : "")}
-              </select>
-              <select class="form-control pred-semi" data-index="2" ${bonusLocked ? 'disabled' : ''}>
-                ${getTeamOptions(pBonus.semis ? pBonus.semis[2] : "")}
-              </select>
-              <select class="form-control pred-semi" data-index="3" ${bonusLocked ? 'disabled' : ''}>
-                ${getTeamOptions(pBonus.semis ? pBonus.semis[3] : "")}
-              </select>
-            </div>
-          </div>
-
-          ${bonusLocked
-            ? `<div style="margin-top:1rem; padding:0.6rem 1rem; background:rgba(107,114,128,0.1); border:1px solid rgba(107,114,128,0.2); border-radius:8px; color:var(--text-muted); font-size:0.82rem; text-align:center;">🔒 No se pueden modificar las predicciones</div>`
-            : `<button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">💾 Guardar Podio Predicho</button>`
-          }
-        </form>
-      </div>
-
-      <!-- Section 2: Real Admin Podio Results -->
-      <div class="panel-card" style="border-color: rgba(251, 191, 36, 0.2);">
-        <h3 class="panel-title" style="color: var(--accent-gold)">🔑 Resultados Reales del Podio</h3>
-        ${isAdmin() ? `
-        <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:1.5rem;">
-          Define los resultados oficiales para calcular los puntos bonus de todos los participantes.
-        </p>
-        <form id="bonus-real-results-form">
+    ${isAdmin() ? `
+    <div class="panel-card" style="margin-bottom:1.5rem; border-color:rgba(251,191,36,0.3);">
+      <h3 class="panel-title" style="color:var(--accent-gold); margin-bottom:1rem;">🔑 Resultados Reales del Podio <span style="font-size:0.75rem; font-weight:400; color:var(--text-secondary);">(solo admin)</span></h3>
+      <form id="bonus-real-results-form">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; flex-wrap:wrap;">
           <div class="form-group">
             <label class="form-label">🏆 Campeón Real</label>
-            <select class="form-control" id="real-champ">
-              ${getTeamOptions(state.results ? state.results.champion : "")}
-            </select>
+            <select class="form-control" id="real-champ">${teamOpts(res.champion)}</select>
           </div>
           <div class="form-group">
             <label class="form-label">🥈 Subcampeón Real</label>
-            <select class="form-control" id="real-runner">
-              ${getTeamOptions(state.results ? state.results.runnerUp : "")}
-            </select>
+            <select class="form-control" id="real-runner">${teamOpts(res.runnerUp)}</select>
           </div>
           <div class="form-group">
-            <label class="form-label">🥉 Semifinalistas Reales</label>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem;">
-              <select class="form-control real-semi" data-index="0">
-                ${getTeamOptions(state.results && state.results.semis ? state.results.semis[0] : "")}
-              </select>
-              <select class="form-control real-semi" data-index="1">
-                ${getTeamOptions(state.results && state.results.semis ? state.results.semis[1] : "")}
-              </select>
-              <select class="form-control real-semi" data-index="2">
-                ${getTeamOptions(state.results && state.results.semis ? state.results.semis[2] : "")}
-              </select>
-              <select class="form-control real-semi" data-index="3">
-                ${getTeamOptions(state.results && state.results.semis ? state.results.semis[3] : "")}
-              </select>
-            </div>
+            <label class="form-label">🥉 Semifinalista 1</label>
+            <select class="form-control real-semi" data-index="0">${teamOpts(res.semis && res.semis[0])}</select>
           </div>
-          <button type="submit" class="btn btn-secondary" style="width: 100%; border-color: var(--accent-gold); color: var(--accent-gold); margin-top: 1rem;">
-            🏆 Guardar Podio Real
-          </button>
-        </form>
-        ` : `
-        <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:1.5rem;">
-          Solo el administrador puede definir los resultados oficiales una vez termine el torneo.
-        </p>
-        <div style="padding: 1.5rem; background: rgba(251,191,36,0.06); border-radius: 8px; border: 1px solid rgba(251,191,36,0.15);">
-          <div style="margin-bottom:1rem;"><span class="form-label">🏆 Campeón Real</span><br><span style="color:var(--text-primary); font-weight:600;">${state.results && state.results.champion ? `${getFlag(state.results.champion)} ${state.results.champion}` : '<span style="color:var(--text-muted)">Por definir</span>'}</span></div>
-          <div style="margin-bottom:1rem;"><span class="form-label">🥈 Subcampeón Real</span><br><span style="color:var(--text-primary); font-weight:600;">${state.results && state.results.runnerUp ? `${getFlag(state.results.runnerUp)} ${state.results.runnerUp}` : '<span style="color:var(--text-muted)">Por definir</span>'}</span></div>
-          <div><span class="form-label">🥉 Semifinalistas Reales</span><br>${state.results && state.results.semis && state.results.semis.some(s => s) ? state.results.semis.filter(s => s).map(s => `<span style="display:inline-block; margin:0.25rem 0.5rem 0 0; font-weight:600;">${getFlag(s)} ${s}</span>`).join('') : '<span style="color:var(--text-muted)">Por definir</span>'}</div>
+          <div class="form-group">
+            <label class="form-label">🥉 Semifinalista 2</label>
+            <select class="form-control real-semi" data-index="1">${teamOpts(res.semis && res.semis[1])}</select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">🥉 Semifinalista 3</label>
+            <select class="form-control real-semi" data-index="2">${teamOpts(res.semis && res.semis[2])}</select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">🥉 Semifinalista 4</label>
+            <select class="form-control real-semi" data-index="3">${teamOpts(res.semis && res.semis[3])}</select>
+          </div>
         </div>
-        `}
+        <button type="submit" class="btn btn-secondary" style="width:100%; margin-top:0.5rem; border-color:var(--accent-gold); color:var(--accent-gold);">
+          🏆 Guardar Podio Real
+        </button>
+      </form>
+    </div>
+    ` : hasResults ? `
+    <div class="panel-card" style="margin-bottom:1.5rem; border-color:rgba(251,191,36,0.2);">
+      <h3 class="panel-title" style="color:var(--accent-gold); margin-bottom:1rem;">🏆 Podio Real</h3>
+      <div style="display:flex; flex-wrap:wrap; gap:1.5rem;">
+        <div><div class="form-label" style="margin-bottom:0.25rem;">Campeón</div><span style="font-weight:700; font-size:1rem;">${getFlag(res.champion)} ${res.champion}</span></div>
+        <div><div class="form-label" style="margin-bottom:0.25rem;">Subcampeón</div><span style="font-weight:600;">${getFlag(res.runnerUp)} ${res.runnerUp}</span></div>
+        ${res.semis && res.semis.some(Boolean) ? `<div><div class="form-label" style="margin-bottom:0.25rem;">Semifinalistas</div><span>${res.semis.filter(Boolean).map(s => `${getFlag(s)} ${s}`).join(' · ')}</span></div>` : ''}
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="panel-card">
+      <h3 class="panel-title" style="margin-bottom:1.25rem;">Predicciones de cada participante</h3>
+      <div style="overflow-x:auto;">
+        <table class="ranking-table" style="min-width:500px;">
+          <thead>
+            <tr>
+              <th>Participante</th>
+              <th>🏆 Campeón</th>
+              <th>🥈 Subcampeón</th>
+              <th>🥉 Semifinalistas</th>
+              ${hasResults ? '<th style="text-align:center;">Pts Bonus</th>' : ''}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows || '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Sin predicciones de bracket aún.</td></tr>'}
+          </tbody>
+        </table>
       </div>
     </div>
   `;
 
-  // Submit Predictions Form
-  document.getElementById("bonus-prediction-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (isBonusLocked()) { showToast("Las predicciones del podio están cerradas.", "error"); return; }
-    const pId = activeBonusParticipantId;
-    const submitBtn = e.target.querySelector("button[type=submit]");
-    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "⏳ Guardando..."; }
-
-    const champion = document.getElementById("pred-champ").value;
-    const runnerUp = document.getElementById("pred-runner").value;
-    const semis = Array.from(document.querySelectorAll(".pred-semi")).map(el => el.value);
-
-    state.bonus[pId] = { champion, runnerUp, semis };
-    try {
-      await col("bonus").doc(String(pId)).set(state.bonus[pId]);
-      showToast("Predicciones de podio guardadas. ✓");
-    } catch (e) {
-      // error toast shown inside col().set()
-    } finally {
-      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "💾 Guardar Podio Predicho"; }
-    }
-    renderBonus();
-  });
-
-  // Submit Real Results Form (admin only)
   const realForm = document.getElementById("bonus-real-results-form");
   if (realForm) {
     realForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (!isAdmin()) { showToast("Solo el administrador puede cambiar los resultados.", "error"); return; }
-
-      const champion = document.getElementById("real-champ").value;
-      const runnerUp = document.getElementById("real-runner").value;
-      const semis = Array.from(document.querySelectorAll(".real-semi")).map(el => el.value);
-
-      state.results = { champion, runnerUp, semis };
-      await saveMainDoc();
-      showToast("Resultados oficiales del podio guardados correctamente.");
+      const btn = realForm.querySelector("button[type=submit]");
+      if (btn) { btn.disabled = true; btn.textContent = "⏳ Guardando..."; }
+      state.results = {
+        champion: document.getElementById("real-champ").value,
+        runnerUp: document.getElementById("real-runner").value,
+        semis: Array.from(document.querySelectorAll(".real-semi")).map(el => el.value)
+      };
+      try {
+        await saveMainDoc();
+        showToast("Resultados oficiales del podio guardados. ✓");
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = "🏆 Guardar Podio Real"; }
+      }
       renderBonus();
     });
   }
@@ -2096,6 +2054,50 @@ function resolveTeamForParticipant(teamName, participantId, _depth) {
   }
 
   return teamName;
+}
+
+// Derives each participant's predicted podium from their bracket predictions.
+// Champion = winner of final (104), Runner-up = loser of final,
+// Semis = the 4 QF predicted winners (matches 97-100).
+function getBracketPodium(participantId) {
+  function getPred(matchId) {
+    const preds = state.predictions[participantId]
+      || state.predictions[String(participantId)] || {};
+    return preds[matchId] || preds[String(matchId)] || {};
+  }
+  function getSrc(matchId) {
+    return state.matches.find(m => String(m.id) === String(matchId));
+  }
+  function predWinner(matchId) {
+    const src = getSrc(matchId);
+    if (!src) return null;
+    const pred = getPred(matchId);
+    if (pred.winner && !isPlaceholderTeam(pred.winner)) return pred.winner;
+    const a = pred.scoreA != null ? Number(pred.scoreA) : null;
+    const b = pred.scoreB != null ? Number(pred.scoreB) : null;
+    if (a !== null && b !== null && a !== b) {
+      const tA = resolveTeamForParticipant(src.teamA, participantId);
+      const tB = resolveTeamForParticipant(src.teamB, participantId);
+      if (!isPlaceholderTeam(tA) && !isPlaceholderTeam(tB)) return a > b ? tA : tB;
+    }
+    return null;
+  }
+  function predLoser(matchId) {
+    const src = getSrc(matchId);
+    if (!src) return null;
+    const w = predWinner(matchId);
+    if (!w) return null;
+    const tA = resolveTeamForParticipant(src.teamA, participantId);
+    const tB = resolveTeamForParticipant(src.teamB, participantId);
+    if (isPlaceholderTeam(tA) || isPlaceholderTeam(tB)) return null;
+    return w === tA ? tB : tA;
+  }
+
+  return {
+    champion: predWinner(104),
+    runnerUp: predLoser(104),
+    semis: [97, 98, 99, 100].map(id => predWinner(id)).filter(Boolean)
+  };
 }
 
 function calcPredPoints(pred, m) {
