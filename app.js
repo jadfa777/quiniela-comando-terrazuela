@@ -1829,9 +1829,14 @@ function renderBonus() {
   const pBonus = state.bonus[p.id] || { champion: "", runnerUp: "", semis: ["", "", "", ""] };
 
 
-  // Extract all teams list dynamically from matches to feed suggestion/dropdown
+  // Extract all teams list dynamically from matches, excluding eliminated teams
+  const eliminatedTeams = new Set(
+    state.matches
+      .filter(m => m.phase !== "Grupos" && m.winner)
+      .flatMap(m => [m.teamA, m.teamB].filter(t => t !== m.winner))
+  );
   const allTeams = [...new Set(state.matches.map(m => m.teamA).concat(state.matches.map(m => m.teamB)))]
-    .filter(t => t && !t.includes("Grupo") && !t.includes("Ganador") && !t.includes("Perdedor"))
+    .filter(t => t && !t.includes("Grupo") && !t.includes("Ganador") && !t.includes("Perdedor") && !eliminatedTeams.has(t))
     .sort();
 
   const getTeamOptions = (selectedVal) => {
