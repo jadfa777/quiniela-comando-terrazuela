@@ -1830,10 +1830,18 @@ function renderBonus() {
 
 
   // Extract all teams list dynamically from matches, excluding eliminated teams
+  const isPlaceholder = t => !t || /^(Ganador|Perdedor|\dº Grupo)/.test(t);
   const eliminatedTeams = new Set(
     state.matches
-      .filter(m => m.phase !== "Grupos" && m.winner)
-      .flatMap(m => [m.teamA, m.teamB].filter(t => t !== m.winner))
+      .filter(m => m.phase !== "Grupos" && m.scoreA !== null && m.scoreB !== null)
+      .flatMap(m => {
+        const loser = m.winner
+          ? [m.teamA, m.teamB].find(t => t !== m.winner)
+          : m.scoreA > m.scoreB ? m.teamB
+          : m.scoreB > m.scoreA ? m.teamA
+          : null;
+        return loser && !isPlaceholder(loser) ? [loser] : [];
+      })
   );
   const allTeams = [...new Set(state.matches.map(m => m.teamA).concat(state.matches.map(m => m.teamB)))]
     .filter(t => t && !t.includes("Grupo") && !t.includes("Ganador") && !t.includes("Perdedor") && !eliminatedTeams.has(t))
