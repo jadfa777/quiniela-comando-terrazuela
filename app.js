@@ -767,7 +767,7 @@ function renderDashboard() {
     if (m.scoreA !== null && m.scoreB !== null) matchesPlayed++;
   });
 
-  const scores = calculateScores(null);
+  const scores = calculateScores(["Dieciseisavos", "Octavos", "Cuartos", "Semifinales", "Tercer puesto", "Final"]);
   const leaderName = scores.length > 0 ? scores[0].name : "Ninguno";
   const leaderPoints = scores.length > 0 ? scores[0].total : 0;
 
@@ -1594,8 +1594,9 @@ function calculateScores(phaseFilter) {
       }
     });
 
-    // 2. Bonus scoring derived from bracket predictions (only in total view)
-    if (!phaseFilter && state.results) {
+    // 2. Bonus scoring derived from bracket predictions (total view or non-grupos filter)
+    const includesBonus = !phaseFilter || (Array.isArray(phaseFilter) && phaseFilter.includes("Final"));
+    if (includesBonus && state.results) {
       const pPodium = getBracketPodium(p.id);
       if (state.results.champion && pPodium.champion === state.results.champion) {
         bonusPoints += state.config.champion;
