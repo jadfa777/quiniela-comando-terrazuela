@@ -767,7 +767,7 @@ function renderDashboard() {
     if (m.scoreA !== null && m.scoreB !== null) matchesPlayed++;
   });
 
-  const scores = calculateScores(["Dieciseisavos", "Octavos"]);
+  const scores = calculateScores(null);
   const leaderName = scores.length > 0 ? scores[0].name : "Ninguno";
   const leaderPoints = scores.length > 0 ? scores[0].total : 0;
 
@@ -800,7 +800,7 @@ function renderDashboard() {
 
     <div class="dashboard-grid">
       <div class="panel-card">
-        <h3 class="panel-title">⭐ 16avos + 8vos — Tabla de Posiciones</h3>
+        <h3 class="panel-title">⭐ Clasificación General</h3>
         <div class="table-responsive">
           <table class="custom-table">
             <thead>
