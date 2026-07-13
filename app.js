@@ -836,18 +836,21 @@ function renderDashboard() {
       <div class="panel-card">
         <h3 class="panel-title">📅 Próximos Partidos</h3>
         <div class="recent-matches-list">
-          ${state.matches.filter(m => m.scoreA === null && m.scoreB === null).slice(0, 4).map(m => `
+          ${state.matches.filter(m => m.scoreA === null && m.scoreB === null).slice(0, 4).map(m => {
+            const tA = resolveTeamFromResults(m.teamA);
+            const tB = resolveTeamFromResults(m.teamB);
+            return `
             <div class="recent-item recent-item-clickable" onclick="goToPrediction(${m.id})">
               <div class="recent-info">
                 <div class="recent-icon">⚽</div>
                 <div class="recent-text">
-                  <p>${getFlag(m.teamA)} ${m.teamA} vs ${m.teamB} ${getFlag(m.teamB)}</p>
+                  <p>${getFlag(tA)} ${tA} vs ${tB} ${getFlag(tB)}</p>
                   <span>Fase: ${m.phase} ${m.group ? `(Grupo ${m.group})` : ''}</span>
                 </div>
               </div>
               <span class="recent-badge btn-secondary" style="font-size: 0.75rem">${formatMatchSchedule(m)} →</span>
-            </div>
-          `).join('')}
+            </div>`;
+          }).join('')}
           ${state.matches.filter(m => m.scoreA === null && m.scoreB === null).length === 0 ? 
             '<p style="color: var(--text-muted); text-align: center; padding: 1rem;">Todos los partidos se han jugado.</p>' : ''}
         </div>
@@ -2004,6 +2007,30 @@ function formatMatchSchedule(m) {
 function isMatchLocked(m) {
   if (!m.kickoff && (!m.date || !m.time)) return false;
   return Date.now() >= new Date(m.kickoff || `${m.date}T${m.time}:00${m.utcOffset || ""}`).getTime();
+}
+
+function resolveTeamFromResults(teamName, depth) {
+  if (!teamName || (depth || 0) > 8) return teamName;
+  const d = (depth || 0) + 1;
+  const ganador = /^Ganador (\d+)$/.exec(teamName);
+  if (ganador) {
+    const src = state.matches.find(m => String(m.id) === ganador[1]);
+    if (src && src.winner && !isPlaceholderTeam(src.winner)) return src.winner;
+    if (src && !isPlaceholderTeam(src.teamA)) return resolveTeamFromResults(src.teamA, d);
+    return teamName;
+  }
+  const perdedor = /^Perdedor (\d+)$/.exec(teamName);
+  if (perdedor) {
+    const src = state.matches.find(m => String(m.id) === perdedor[1]);
+    if (src && src.winner && !isPlaceholderTeam(src.winner)) {
+      const other = src.winner === resolveTeamFromResults(src.teamA, d)
+        ? resolveTeamFromResults(src.teamB, d)
+        : resolveTeamFromResults(src.teamA, d);
+      return isPlaceholderTeam(other) ? teamName : other;
+    }
+    return teamName;
+  }
+  return teamName;
 }
 
 function isBonusLocked() {
