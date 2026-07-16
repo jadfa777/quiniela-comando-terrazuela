@@ -2052,9 +2052,13 @@ function resolveTeamForParticipant(teamName, participantId, _depth) {
     return preds[srcId] || preds[String(srcId)] || {};
   }
 
-  // Helper: find match by id (robust against number/string mismatch)
+  // Helper: find match by id (robust against number/string mismatch).
+  // Uses officialMatches (the static bracket skeleton) rather than state.matches,
+  // because state.matches gets overwritten with real team names as the real
+  // tournament progresses — which would short-circuit a participant's own
+  // (possibly different) bracket prediction back to the real-world result.
   function getSrc(srcId) {
-    return state.matches.find(m => m.id === srcId || String(m.id) === String(srcId));
+    return officialMatches.find(m => m.id === srcId || String(m.id) === String(srcId));
   }
 
   const ganador = /^Ganador (\d+)$/.exec(teamName);
@@ -2102,7 +2106,11 @@ function getBracketPodium(participantId) {
     return preds[matchId] || preds[String(matchId)] || {};
   }
   function getSrc(matchId) {
-    return state.matches.find(m => String(m.id) === String(matchId));
+    // Use officialMatches (unresolved skeleton), same reasoning as in
+    // resolveTeamForParticipant: state.matches gets overwritten with real
+    // team names as the tournament progresses, which would make this
+    // resolve to the real bracket instead of the participant's own picks.
+    return officialMatches.find(m => String(m.id) === String(matchId));
   }
   function predWinner(matchId) {
     const src = getSrc(matchId);
