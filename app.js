@@ -1334,7 +1334,11 @@ function renderPredictions() {
         const locked = isMatchLocked(m);
 
         // Bracket cascade: resolve placeholder names from participant's predictions (Cuartos onwards)
-        const BRACKET_PHASES = ["Cuartos", "Semifinales", "Tercer puesto", "Final"];
+        // Individual "breakers" only start at Cuartos: everyone sees the real
+        // Cuartos matchup (it's seeded from real Octavos results, same for all),
+        // and each participant's own Cuartos picks are what seed their personal
+        // bracket from Semifinales onward.
+        const BRACKET_PHASES = ["Semifinales", "Tercer puesto", "Final"];
         const isBracket = BRACKET_PHASES.includes(m.phase);
         const displayTeamA = isBracket ? resolveTeamForParticipant(m.teamA, activePredictionParticipantId) : m.teamA;
         const displayTeamB = isBracket ? resolveTeamForParticipant(m.teamB, activePredictionParticipantId) : m.teamB;
@@ -2064,14 +2068,29 @@ function resolveTeamForParticipant(teamName, participantId, _depth) {
     return officialMatches.find(m => m.id === srcId || String(m.id) === String(srcId));
   }
 
+  // Individual "breakers" only start at Semifinales. A reference to a Cuartos
+  // match (id <= 100) or earlier is the real-world result, the same for every
+  // participant — not something to cascade through each participant's own
+  // earlier-round picks. So when resolving such a reference, use its real teams
+  // instead of recursing further down (only Semis/3rd/Final, id >= 101, cascade).
+  function resolvedTeamsOf(srcId, src) {
+    if (srcId <= 100) {
+      const real = state.matches.find(m => String(m.id) === String(srcId));
+      return [real ? real.teamA : src.teamA, real ? real.teamB : src.teamB];
+    }
+    return [
+      resolveTeamForParticipant(src.teamA, participantId, d),
+      resolveTeamForParticipant(src.teamB, participantId, d)
+    ];
+  }
+
   const ganador = /^Ganador (\d+)$/.exec(teamName);
   if (ganador) {
     const srcId = parseInt(ganador[1]);
     const src = getSrc(srcId);
     if (!src) return teamName;
     const pred = getPred(srcId);
-    const rA = resolveTeamForParticipant(src.teamA, participantId, d);
-    const rB = resolveTeamForParticipant(src.teamB, participantId, d);
+    const [rA, rB] = resolvedTeamsOf(srcId, src);
     // Use the stored winner only if it's a real team name AND still one of the two
     // teams currently resolved for this match — an earlier round's pick can change
     // after this winner was clicked/computed, orphaning it (see predWinner above).
@@ -2095,8 +2114,7 @@ function resolveTeamForParticipant(teamName, participantId, _depth) {
     if (!src) return teamName;
     const pred = getPred(srcId);
     if (pred.winner && !isPlaceholderTeam(pred.winner)) {
-      const rA = resolveTeamForParticipant(src.teamA, participantId, d);
-      const rB = resolveTeamForParticipant(src.teamB, participantId, d);
+      const [rA, rB] = resolvedTeamsOf(srcId, src);
       const stillValid = isPlaceholderTeam(rA) || isPlaceholderTeam(rB)
         || pred.winner === rA || pred.winner === rB;
       if (stillValid) return pred.winner === rA ? rB : rA;
@@ -2123,12 +2141,24 @@ function getBracketPodium(participantId) {
     // resolve to the real bracket instead of the participant's own picks.
     return officialMatches.find(m => String(m.id) === String(matchId));
   }
+  // Cuartos (97-100) matches are never participant-cascaded — everyone sees the
+  // real Cuartos matchup (seeded from real Octavos results). Only Semis/3rd/Final
+  // (101+) depend on each participant's own picks. See resolveTeamForParticipant.
+  function resolvedTeams(matchId, src) {
+    if (matchId <= 100) {
+      const real = state.matches.find(m => String(m.id) === String(matchId));
+      return [real ? real.teamA : src.teamA, real ? real.teamB : src.teamB];
+    }
+    return [
+      resolveTeamForParticipant(src.teamA, participantId),
+      resolveTeamForParticipant(src.teamB, participantId)
+    ];
+  }
   function predWinner(matchId) {
     const src = getSrc(matchId);
     if (!src) return null;
     const pred = getPred(matchId);
-    const tA = resolveTeamForParticipant(src.teamA, participantId);
-    const tB = resolveTeamForParticipant(src.teamB, participantId);
+    const [tA, tB] = resolvedTeams(matchId, src);
     // Only trust an explicitly-clicked winner if it's still one of the two teams
     // currently resolved for this match. If an upstream pick changed after the
     // winner was clicked (e.g. a draw score whose qualifier button was set before
@@ -2152,8 +2182,7 @@ function getBracketPodium(participantId) {
     if (!src) return null;
     const w = predWinner(matchId);
     if (!w) return null;
-    const tA = resolveTeamForParticipant(src.teamA, participantId);
-    const tB = resolveTeamForParticipant(src.teamB, participantId);
+    const [tA, tB] = resolvedTeams(matchId, src);
     if (isPlaceholderTeam(tA) || isPlaceholderTeam(tB)) return null;
     return w === tA ? tB : tA;
   }
