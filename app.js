@@ -1401,7 +1401,10 @@ function renderPredictions() {
 
             ${isKnockout ? (() => {
               const isDraw = pred.scoreA !== null && pred.scoreB !== null && pred.scoreA === pred.scoreB;
-              const noWinner = !pred.winner;
+              // A stored winner that no longer matches either currently-displayed team is
+              // orphaned (e.g. an upstream bracket pick changed after this was clicked) —
+              // treat it the same as having no pick so the required prompt shows again.
+              const noWinner = !pred.winner || (pred.winner !== displayTeamA && pred.winner !== displayTeamB);
               const required = isDraw && noWinner && !locked;
               return `
               <div class="qualifier-select-container${required ? ' qualifier-required' : ''}">
@@ -2116,12 +2119,22 @@ function getBracketPodium(participantId) {
     const src = getSrc(matchId);
     if (!src) return null;
     const pred = getPred(matchId);
-    if (pred.winner && !isPlaceholderTeam(pred.winner)) return pred.winner;
+    const tA = resolveTeamForParticipant(src.teamA, participantId);
+    const tB = resolveTeamForParticipant(src.teamB, participantId);
+    // Only trust an explicitly-clicked winner if it's still one of the two teams
+    // currently resolved for this match. If an upstream pick changed after the
+    // winner was clicked (e.g. a draw score whose qualifier button was set before
+    // the participant changed an earlier round), the stored winner becomes an
+    // orphaned value that no longer belongs to either side — ignore it instead
+    // of reporting a team that isn't even playing this match.
+    if (pred.winner && !isPlaceholderTeam(pred.winner)) {
+      const stillValid = isPlaceholderTeam(tA) || isPlaceholderTeam(tB)
+        || pred.winner === tA || pred.winner === tB;
+      if (stillValid) return pred.winner;
+    }
     const a = pred.scoreA != null ? Number(pred.scoreA) : null;
     const b = pred.scoreB != null ? Number(pred.scoreB) : null;
     if (a !== null && b !== null && a !== b) {
-      const tA = resolveTeamForParticipant(src.teamA, participantId);
-      const tB = resolveTeamForParticipant(src.teamB, participantId);
       if (!isPlaceholderTeam(tA) && !isPlaceholderTeam(tB)) return a > b ? tA : tB;
     }
     return null;
