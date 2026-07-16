@@ -2070,14 +2070,20 @@ function resolveTeamForParticipant(teamName, participantId, _depth) {
     const src = getSrc(srcId);
     if (!src) return teamName;
     const pred = getPred(srcId);
-    // Use stored winner only if it's a real team name (not itself a placeholder)
-    if (pred.winner && !isPlaceholderTeam(pred.winner)) return pred.winner;
+    const rA = resolveTeamForParticipant(src.teamA, participantId, d);
+    const rB = resolveTeamForParticipant(src.teamB, participantId, d);
+    // Use the stored winner only if it's a real team name AND still one of the two
+    // teams currently resolved for this match — an earlier round's pick can change
+    // after this winner was clicked/computed, orphaning it (see predWinner above).
+    if (pred.winner && !isPlaceholderTeam(pred.winner)) {
+      const stillValid = isPlaceholderTeam(rA) || isPlaceholderTeam(rB)
+        || pred.winner === rA || pred.winner === rB;
+      if (stillValid) return pred.winner;
+    }
     const a = pred.scoreA != null ? Number(pred.scoreA) : null;
     const b = pred.scoreB != null ? Number(pred.scoreB) : null;
     if (a !== null && b !== null && a !== b) {
-      return a > b
-        ? resolveTeamForParticipant(src.teamA, participantId, d)
-        : resolveTeamForParticipant(src.teamB, participantId, d);
+      return a > b ? rA : rB;
     }
     return teamName;
   }
@@ -2091,7 +2097,9 @@ function resolveTeamForParticipant(teamName, participantId, _depth) {
     if (pred.winner && !isPlaceholderTeam(pred.winner)) {
       const rA = resolveTeamForParticipant(src.teamA, participantId, d);
       const rB = resolveTeamForParticipant(src.teamB, participantId, d);
-      return pred.winner === rA ? rB : rA;
+      const stillValid = isPlaceholderTeam(rA) || isPlaceholderTeam(rB)
+        || pred.winner === rA || pred.winner === rB;
+      if (stillValid) return pred.winner === rA ? rB : rA;
     }
     return teamName;
   }
